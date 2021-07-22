@@ -1,6 +1,8 @@
 # vqls-bachelor-thesis
 This repository contains the source code for a bachelor thesis at the [HISKP](https://www.hiskp.uni-bonn.de/index.php?id=29&L=1) of the [University of Bonn](https://www.uni-bonn.de/en). Topic was the implementation of the [VQLS-algorithm as presented by Bravo-Prieto et al.](https://arxiv.org/abs/1909.05820) in the [Qiskit](https://qiskit.org) quantum simulator. 
 
+Author of this thesis and implementation: Alexander C. Mühlhausen
+
 ## Simulations
 In the folder __Simulation__ an implementation for the simulator is stored. It consists of three files:
 - `GlobalParameters.py` provides the class `GlobalParameters` which implements the data structure necessary to define the physical problem. It also provides an instance of the class called `params` and imported by all other files. This is the actual problem the code works on.
