@@ -20,13 +20,12 @@ from typing import List, Set, Dict, Tuple, Optional, Union
 
 
 """
-################################################################################
 
 ######### Global Parameters
 
 Those parameters are required by almost all functions but do not need to be
 changed during runtime. As one might want to change them between program
-executions it is very helpful to have them accesible and in one place.
+executions it is sensible to have them accesible and in one place.
 
 """
 
@@ -34,19 +33,20 @@ executions it is very helpful to have them accesible and in one place.
 class GlobalParameters:
     def _init_alpha_randomly(self) -> List[float]:
         """
-        This function initalizes alpha randomly. It returns a list.
+        This function initalizes alpha randomly.
         """
         # how many parameters are required
         n_alpha_i = self.n_qubits + self.n_layers * (self.n_qubits-1) * 2
+
         alpha_rand = [float(random.randint(0, 6283))/1000 for _ in range(n_alpha_i)]
-    #    return (_format_alpha(alpha_rand))
+
         return alpha_rand
 
     def _decompose_asGate(self, gate: str) -> List[Gate]:
         """
-        This function returns a list of the length n_qubits. The first item is a
-        circuit.to_gate() with the Gate applied to the first qubit, the last item
-        with the Gate applied to the last qubit.
+        This function returns a list of Gate-Objects of length n_qubits.
+        The first item is the Gate applied to the first qubit, the last item
+        is the Gate applied to the last qubit.
         """
 
         dec_asGate: List[Gate] = []
@@ -69,16 +69,14 @@ class GlobalParameters:
                 temp.z(i)
             temp.to_gate()
             dec_asGate.append(temp)
+
         return dec_asGate
 
     def _decompositions(self):
         """
         This helper function is used to prepare some lists with standard decompositions
-        that might be used to piece together A.
+        that might be used to set together A.
         Those lists are stored in the class.
-
-        It is assumed that A can be decomposed in a way that only one unitary acts on a
-        single qubit.
         """
         # ZY Gates
         self.decomposition_asGate_YZ = self._decompose_asGate("YZ")
@@ -129,8 +127,8 @@ class GlobalParameters:
         """
         The following lines present an example on how to define A and its decomposition.
         """
-        self.decomposition_asGate = self.decomposition_asGate_YZ
-        self.decomposition_adjoint = self.decomposition_adjoint_YZ
+        self.decomposition_asGate = self.decomposition_asGate_Id
+        self.decomposition_adjoint = self.decomposition_adjoint_Id
 
 
 # This instance of the class is imported and used by all other modules.
@@ -139,10 +137,10 @@ class GlobalParameters:
 
 params = GlobalParameters(
             n_qubits=4,
-            n_layers=5,
+            n_layers=2,
             coefficients=[complex(0, 0), complex(0, 0),
                           complex(1, 0), complex(0, 0)],
-            IBMQ_TOKEN = "XXXX",
-            COBYLA_maxiter=3,
+            IBMQ_TOKEN="Insert your token here!",
+            COBYLA_maxiter=100,
             IBMQ_shots=8192
             )
