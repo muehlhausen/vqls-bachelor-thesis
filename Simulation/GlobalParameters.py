@@ -20,7 +20,6 @@ from typing import List, Set, Dict, Tuple, Optional, Union
 
 
 """
-################################################################################
 
 ######### Global Parameters
 
@@ -34,20 +33,21 @@ executions it is very helpful to have them accesible and in one place.
 class GlobalParameters:
     def _init_alpha_randomly(self) -> List[float]:
         """
-        This function initalizes alpha randomly. It returns a list.
+        This function initalizes alpha randomly.
         """
         # how many parameters are required
         n_alpha_i = self.n_qubits + self.n_layers * (self.n_qubits-1) * 2
+
         alpha_rand = [float(random.randint(0, 6283))/1000 for _ in range(n_alpha_i)]
-    #    return (_format_alpha(alpha_rand))
+
         return alpha_rand
 
     def _decompose_asOperator(self, gate: str) -> List[Operator]:
         """
-        This function returns a list of the length n_qubits.
-        The first item is the Operator representing a Z gate acting on the first
-        qubit. The last item is the Operator representing a Z gate acting on the
-        last qubit.
+        This function returns a list of Operator-Objects of length n_qubits.
+        The first item is the Operator representing a Z gate acting on the
+        first qubit. The last item is the Operator representing a Z gate
+        acting on the last qubit.
         """
 
         if gate == "Z":
@@ -83,9 +83,9 @@ class GlobalParameters:
 
     def _decompose_asGate(self, gate: str) -> List[Gate]:
         """
-        This function returns a list of the length n_qubits. The first item is a
-        circuit.to_gate() with the Gate applied to the first qubit, the last item
-        with the Gate applied to the last qubit.
+        This function returns a list of Gate-Objects of length n_qubits.
+        The first item is the Gate applied to the first qubit, the last item
+        is the Gate applied to the last qubit.
         """
 
         dec_asGate: List[Gate] = []
@@ -102,16 +102,14 @@ class GlobalParameters:
                 temp.x(i)
             temp.to_gate()
             dec_asGate.append(temp)
+
         return dec_asGate
 
     def _decompositions(self):
         """
         This helper function is used to prepare some lists with standard decompositions
-        that might be used to piece together A.
+        that might be used to set together A.
         Those lists are stored in the class.
-
-        It is assumed that A can be decomposed in a way that only one unitary acts on a
-        single qubit.
         """
         # Z Gates
         self.decomposition_asGate_Z = self._decompose_asGate("Z")
@@ -141,7 +139,7 @@ class GlobalParameters:
 
     def __init__(self, n_qubits: int, n_layers: int, coefficients: List[complex],
                  COBYLA_maxiter: int = 150, qiskit_simulation_shots: int = 10**3,
-                 qiskit_simulation_backend: str = 'statevector_simulator',
+                 qiskit_simulation_backend: str = 'qasm_simulator',
                  method_minimization: str = 'COBYLA'):
         self.n_qubits = n_qubits
 
@@ -171,9 +169,9 @@ class GlobalParameters:
         """
         The following lines present an example on how to define A and its decomposition.
         """
-        self.decomposition_asGate = self.decomposition_asGate_Z
-        self.decomposition_asOperator = self.decomposition_asOperator_Z
-        self.decomposition_adjoint_asOperator = self.decomposition_adjoint_asOperator_Z
+        self.decomposition_asGate = self.decomposition_asGate_Id
+        self.decomposition_asOperator = self.decomposition_adjoint_asOperator_Id
+        self.decomposition_adjoint_asOperator = self.decomposition_adjoint_asOperator_Id
 
         # the Operator A
         self.A = self.coefficients[0] * self.decomposition_asOperator[0]
@@ -187,9 +185,10 @@ class GlobalParameters:
 
 params = GlobalParameters(
             n_qubits=4,
-            n_layers=2,
-            coefficients=[complex(0, 0), complex(0, 1),
+            n_layers=4,
+            coefficients=[complex(0, 0), complex(1, 0),
                           complex(0, 0), complex(0, 0)],
-            COBYLA_maxiter=200,
-            qiskit_simulation_shots=3*10**3
+            COBYLA_maxiter=400,
+            qiskit_simulation_shots=8192,
+            qiskit_simulation_backend="qasm_simulator"
             )

@@ -1,8 +1,5 @@
 """
-################################################################################
-
 Import all required libraries.
-
 """
 
 from qiskit import (
@@ -26,13 +23,15 @@ import cmath
 from typing import List, Set, Dict, Tuple, Optional, Union
 
 # import the params object of the GlobalParameters class
+# this provides the parameters used to desribed and model
+# the problem the minimizer is supposed to use.
 from GlobalParameters import params
 
 
 """
 This program provides an implementation of the Variational Quantum Linear Solver
 as presented by Bravo-Prieto et al. It is implemented for the QISKIT Quantum
-Simulator. This version of the program uses the local cost function.
+SDK. This version of the program uses the local cost function.
 
 Author: Alexander Cornelius Muehlhausen
 
@@ -47,7 +46,7 @@ The core functions of the VQLS algorithm.
 
 def generate_ansatz(alpha: List[float]) -> QuantumCircuit:
     """
-    This function returns a circuit that implements V(alpha).
+    This function returns a circuit that implements the Ansatz V(alpha).
     """
 
     qr_ansatz = QuantumRegister(params.n_qubits)
@@ -106,7 +105,8 @@ def hadamard_test(
     second: Union[Gate, Operator] = None, im=None
      ):
     """
-    This function returns a circuit with the Hadamard Test implemented.
+    This function returns a circuit that implements the Hadamard Test.
+    The ancilliary qubit is the last qubit; a measurement is applied to it.
     """
 
     # prep of QuantumCircuit
@@ -122,6 +122,10 @@ def hadamard_test(
     qubits_designation_control.insert(0, params.n_qubits)
 
     def append_ifExists(obj: Union[Gate, Operator], control=False):
+        """
+        Append gates to a circuit. Convert them to instructions if necessary.
+        Control them if necessary.
+        """
         if isinstance(obj, (Gate, Operator)):
             _obj = obj.copy()
             if isinstance(_obj, Operator):
@@ -141,16 +145,27 @@ def hadamard_test(
 
     append_ifExists(ansatz)
 
+    # clean up the circuit
+    circ_had.barrier()
+
+    # use this for $A_l$
     append_ifExists(first, True)
 
+    # use this for $U^{\dagger}
     append_ifExists(first_uncontrolled)
 
+    # $Z_j$
     if j is not None:
         circ_had.cz(params.n_qubits, qr_had[j])
 
+    # use this for $U$
     append_ifExists(second_uncontrolled)
 
+    # use this for $A^{\dagger}_m$
     append_ifExists(second, True)
+
+    # clean up the circuit
+    circ_had.barrier()
 
     # last operation on the ancilla & measurement
     circ_had.h(ancilla)
@@ -161,31 +176,39 @@ def hadamard_test(
 
 
 def calculate_beta(alpha: List[float]) -> List[List[complex]]:
+    """
+    This function calculates all parameters $\beta_{lm}$ that are required,
+    i.e. all parameters with l, m so that $c_l$ and $c^{*}_m$ are not equal to 0.
+    """
+
     # preparation of the result list
     beta = [[complex(0, 0) for _ in params.coefficients] for _
             in params.coefficients_conjugate]
     # generate Ansatz outside the loops for better performance
     V = generate_ansatz(alpha).to_gate()
 
+    # $A^{\dagger}_m, (m, c^{*}_m)$
     for gate_l, (l, coeff_l) in zip(params.decomposition_asGate,
                                     enumerate(params.coefficients)):
         if coeff_l == 0:
-            continue
+            continue  # increase perfomance by ommiting unused $\beta$
+        # $A^{\dagger}_m, (m, c^{*}_m)$
         for gate_m_adj, (m, coeff_m) in zip(params.decomposition_adjoint_asOperator,
                                             enumerate(params.coefficients_conjugate)):
             if coeff_m == 0:
-                continue
+                continue  # increase perfomance by ommiting unused $\beta$
             # circuit for Re ( <0| V(alpha)(+) A_m(+) A_l V(alpha) |0>)
             circ_had_re = hadamard_test(ansatz=V, first=gate_l,
                                         second=gate_m_adj)
+            # circ_had_re.draw(output='mpl')
             # circuit for Im ( <0| V(alpha)(+) A_m(+) A_l V(alpha) |0>)
             circ_had_im = hadamard_test(ansatz=V, first=gate_l,
                                         second=gate_m_adj, im=1)
 
-            # calculate Re and Im
+            # calculate Re and Im of $\beta_{lm}$ / simulate circuits
             expV_had_re = _calculate_expectationValue_HadamardTest(circ_had_re)
             expV_had_im = _calculate_expectationValue_HadamardTest(circ_had_im)
-            # piece together <> from Re and Im
+            # set together $\beta_{lm}$ from its real and imaginary part
             expV_had = complex(expV_had_re, expV_had_im)
             beta[l][m] = expV_had
 
@@ -193,27 +216,35 @@ def calculate_beta(alpha: List[float]) -> List[List[complex]]:
 
 
 def calculate_delta(alpha: List[float], beta: List[List[complex]]) -> List[List[complex]]:
+    """
+    This function calculates all $\delta_{lm}$ that are required,
+    i.e. all parameters with l, m so that $c_l$ and $c^{*}_m$ are not equal to 0.
+    """
+
+    # initialize the list for the results
     delta = [[complex(0, 0) for _ in params.coefficients] for _
              in params.coefficients_conjugate]
 
+    # prepare $V(\vec{alpha})$, $U$ and $U^{\dagger}$
     V = generate_ansatz(alpha).to_gate()
 
     U = _U_primitive().to_gate()
-
     U_dagger = U.copy()
     U_dagger = Operator(U_dagger)
     U_dagger = U_dagger.adjoint()
 
+    # $A_l, (l, c_l)$
     for gate_l, (l, coeff_l) in zip(params.decomposition_asGate,
                                     enumerate(params.coefficients)):
         if coeff_l == 0:
-            continue
+            continue  # increase perfomance by ommiting unused $\delta$
+        # $A^{\dagger}_m, (m, c^{*}_m)$
         for gate_m_adj, (m, coeff_m) in zip(
                         params.decomposition_adjoint_asOperator,
                         enumerate(params.coefficients_conjugate)
                          ):
             if coeff_m == 0:
-                continue
+                continue  # increase perfomance by ommiting unused $\delta$
             temp = beta[l][m]
             # 1/n_qubits sum_j <0| V(+) A_m(+) U (Z_j * 1_{j-bar}) U(+) A_l V |0>
             for j in range(params.n_qubits):
@@ -231,10 +262,11 @@ def calculate_delta(alpha: List[float], beta: List[List[complex]]) -> List[List[
                               second_uncontrolled=U,
                               second=gate_m_adj, im=1)
 
-                # calculate Re and Im
+                # calculate Re and Im of $\delta_{lm}$ / simulate circuits
                 expV_had_re = _calculate_expectationValue_HadamardTest(circ_had_re)
                 expV_had_im = _calculate_expectationValue_HadamardTest(circ_had_im)
-                # piece together <> from Re and Im
+                # set together $\delta_{lm}$ from its real and imaginary part
+                # and execute the summation
                 expV_had = complex(expV_had_re, expV_had_im)
 
                 temp += 1/params.n_qubits * expV_had
@@ -275,10 +307,12 @@ def calculate_local_cost_function(alpha: List[float]) -> Union[complex, float]:
 
 def minimize_local_cost_function(method: str) -> List[float]:
     """
-    minimizes the local cost function. returns the alpha for which the
-    approximation
-    A V(alpha_out) |0> approx |b>
+    This function minimizes the local cost function.
+    It returns the alpha for which the approximation
+        A V(alpha_out) |0> approx |b>
     is optimal.
+
+    Implements scipy.optimize.minimize .
 
     It provides several methods to minimize the cost function:
     Locally using scipy.optimize.minimize
@@ -287,12 +321,17 @@ def minimize_local_cost_function(method: str) -> List[float]:
     SHGO
     dual annealing
     """
-    # accepted methods for the standard minimization
-    minimization_methods = ["Nelder-Mead", "Powell", "CG", "BFGS",
-                            "Newton-CG", "L-BFGS-B", "TNC", "COBYLA",
-                            "SLSQP", "trust-constr", "dogleg",
-                            "trust-ncg", "trust-exact", "trust-krylov"]
+    # accepted methods for the minimizer
+    # those deliver decent results, but COBYLA was favored
+    minimization_methods = ["COBYLA", "Nelder-Mead", "Powell"]
 
+    """
+    # some methods for the minimizer that were tested but failed to
+    # deliver decent results
+    minimization_methods_unsatisfactory = [
+             "CG", "BFGS", "L-BFGS-B", "TNC", "SLSQP", "trust-constr"
+            ]
+    """
 
     # use minimize and the methods to find a local minimum
     if method in minimization_methods:
@@ -301,31 +340,14 @@ def minimize_local_cost_function(method: str) -> List[float]:
                        options={'maxiter': params.COBYLA_maxiter})
 
     # use basinhopping to find the global minimum
-    # use method_minimization as set in the section constants for the local
-    # minimization
+    # another decent minimiziation approach
     elif method == "basinhopping":
         min = basinhopping(calculate_local_cost_function, x0=params.alpha_0,
                            niter=params.COBYLA_maxiter, minimizer_kwargs =
-                           {'method': method_minimization})
-
-    # global minimum via differnetial evolution
-    elif method == "dif_evol":
-        min = differential_evolution(calculate_local_cost_function, bounds =
-                                     [(0, 2 * np.pi) for i in
-                                     range(len(params.alpha_0))])
-
-    # global minimum via shgo
-    elif method == "shgo":
-        min = shgo(calculate_local_cost_function, bounds = [(0, 2 * np.pi) \
-                   for i in range(len(params.alpha_0))])
-
-    # global minimum via dual annealing
-    elif method == "dual_annealing":
-        min = dual_annealing(calculate_local_cost_function, bounds = \
-                             [(0, 2 * np.pi) for i in range(len(params.alpha_0))])
+                           {'method': "COBYLA"})
 
     else:
-        print("no valid method given")
+        print("No valid method for the minimization was given!")
         return 0
 
     print(min)
@@ -355,7 +377,6 @@ def postCorrection(qc: QuantumCircuit) -> QuantumCircuit:
 
 
 """
-################################################################################
 
 ######### Helper functions
 
@@ -420,6 +441,9 @@ def _calculate_expectationValue_HadamardTest(circ_had: QuantumCircuit) -> float:
     """
     Will return the expectation value for a given circuit for a Hadamard test.
     Supports different backends.
+
+    Code snippets and best practices taken from Qiskit tutorials and documentation,
+    e.g. https://qiskit.org/textbook/ch-paper-implementations/vqls.html .
     """
 
     if params.qiskit_simulation_backend == 'statevector_simulator':
@@ -460,9 +484,7 @@ def _U_primitive() -> QuantumCircuit:
     U |0> = |b> .
 
     This is primitive because this circuit calculates / defines |b> as:
-    |b> = U |0> = A * H(all) * |0>
-
-    H(all) stands for: Hadamard Gate applied to all qubits.
+    |b> = U |0> = A  H(0, 3) |0>
     """
 
     qr_U_primitive = QuantumRegister(params.n_qubits)
@@ -473,8 +495,10 @@ def _U_primitive() -> QuantumCircuit:
     """
 
     circ_U_primitive.h(0)
-    #circ_U_primitive.h(1)
-    #circ_U_primitive.h(2)
+    # optional
+    # circ_U_primitive.h(1)
+    # circ_U_primitive.h(1)
+    # circ_U_primitive.h(2)
     circ_U_primitive.h(3)
 
     A_copy = params.A.copy()
